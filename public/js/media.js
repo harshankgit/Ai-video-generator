@@ -33,6 +33,26 @@ const AGE_PROSODY = {
   old: { rate: '-10%', pitch: '-12Hz' },
 };
 
+const ANIMAL_PROSODY = {
+  bird: { rate: '+8%', pitch: '+40Hz' },
+  parrot: { rate: '+8%', pitch: '+40Hz' },
+  chick: { rate: '+8%', pitch: '+40Hz' },
+  mouse: { rate: '+8%', pitch: '+40Hz' },
+  rabbit: { rate: '+8%', pitch: '+38Hz' },
+  cat: { rate: '+6%', pitch: '+22Hz' },
+  dog: { rate: '+4%', pitch: '+10Hz' },
+  monkey: { rate: '+4%', pitch: '+12Hz' },
+  goat: { rate: '+4%', pitch: '+10Hz' },
+  cow: { rate: '-8%', pitch: '-25Hz' },
+  buffalo: { rate: '-8%', pitch: '-28Hz' },
+  elephant: { rate: '-6%', pitch: '-20Hz' },
+  bear: { rate: '-10%', pitch: '-25Hz' },
+  lion: { rate: '-12%', pitch: '-30Hz' },
+  tiger: { rate: '-10%', pitch: '-28Hz' },
+  horse: { rate: '-4%', pitch: '-15Hz' },
+  rooster: { rate: '+2%', pitch: '+15Hz' },
+}
+
 export function hashStr(s) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -46,7 +66,7 @@ export function hashStr(s) {
 export function assignVoices(p) {
   const voices = { ...(p.voices || {}) };
   const en = p.language === 'en';
-  const teller = (p.voiceStyle || 'storyteller') === 'storyteller' && p.mode !== 'dance'
+  const teller = (p.voiceStyle || 'drama') === 'storyteller' && p.mode !== 'dance'
     ? (p.bible?.characters || []).find((c) => c.id === p.bible?.teller)
     : null;
   if (!voices.narrator) {
@@ -84,7 +104,7 @@ export function assignVoices(p) {
     if (!pick) pick = pool[idx[c.gender] % pool.length];
     idx[c.gender]++;
     used.add(pick);
-    voices[c.id] = { voice: pick, ...(AGE_PROSODY[c.age] || AGE_PROSODY.adult) };
+    voices[c.id] = { voice: pick, ...(c.kind === 'animal' && c.species ? ANIMAL_PROSODY[c.species] || AGE_PROSODY.adult : AGE_PROSODY[c.age] || AGE_PROSODY.adult) };
   }
   p.voices = voices;
   return voices;
@@ -147,6 +167,10 @@ const DEV_RE = /[\u0900-\u097F]+/g;
 const UNSAFE_KID = /\b(thumka\w*|hips?|hip[- ]?shak\w*|belly|midriff|navel|crop[- ]?top|sexy|seductive|sensual|bikini|cleavage|twerk\w*|sultry)\b/gi;
 
 function genderWord(c) {
+  if (c.kind === 'animal') {
+    const sp = c.species || 'animal';
+    return `cute talking cartoon ${sp}`;
+  }
   const f = c.gender === 'female';
   if (c.age === 'child') return `small ${f ? 'girl' : 'boy'} about 5 years old`;
   if (c.age === 'old') return f ? 'old Indian woman' : 'old Indian man';

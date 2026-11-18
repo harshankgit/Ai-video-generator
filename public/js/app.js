@@ -83,7 +83,7 @@ function overlay(msg) {
   if (!o) { o = document.createElement('div'); o.id = 'busy'; o.className = 'busy'; document.body.append(o); }
   o.innerHTML = `<div class="spinner"></div><p>${esc(msg)}</p>`;
 }
-const settings = () => ({ channel: '', quality: 'hd', ...getSettings() });
+const settings = () => ({ channel: 'HarshuVlog', quality: 'hd', ...getSettings() });
 const channelOf = () => (settings().channel || '').replace(/^@/, '').trim();
 
 // ---------- router ----------
@@ -105,6 +105,22 @@ function route() {
 window.addEventListener('hashchange', route);
 const go = (h) => { if (location.hash === h) route(); else location.hash = h; };
 
+// ---------- AUTO GENERATE ----------
+const AUTO_TOPICS = {
+  village: 'ek gaon mein do dost aur unki baatuni gaay',
+  family: 'ek parivaar ki masti aur adventure',
+  kids: 'chhote bachchon ki kahani aur unke saath unka saathi',
+  mystery: 'ek rahasya aur uska solver',
+};
+
+async function autoGenerate(topic, partsCount) {
+  console.log('🎬 autoGenerate clicked:', topic, partsCount);
+  const catId = { village: 'family', family: 'family', kids: 'kids', mystery: 'family' }[topic] || 'family';
+  const url = '#/new/' + catId + '?topic=' + encodeURIComponent(AUTO_TOPICS[topic] || topic) + '&partsCount=' + partsCount;
+  console.log('🎬 Navigating to:', url);
+  go(url);
+}
+
 // ---------- HOME ----------
 function viewHome() {
   const ch = channelOf();
@@ -114,6 +130,18 @@ function viewHome() {
     <p>Topic chuno → AI kahani likhega (Part 1, Part 2…) → AI images, Hindi voice, subtitles, music → <b>ready MP4 + title, description, tags, thumbnail</b>. 100% free, browser mein.</p>
     ${ch ? `<p class="chip">📺 Channel: <b>@${esc(ch)}</b></p>` : `<button class="btn primary" id="setCh" type="button">📺 Apna channel name add karein</button>`}
   </section>
+
+  <section class="auto-gen">
+    <h2>⚡ One-Click Automation</h2>
+    <p>Bas <b>channel name daal dena</b> – baaki sab auto!</p>
+    <div class="grid autos">
+      <button class="card auto-btn" data-topic="village" data-parts="3">🏘️ Gaon ki Kahani (3 parts)</button>
+      <button class="card auto-btn" data-topic="family" data-parts="3">👨‍👩‍👧‍👦 Family Adventure (3 parts)</button>
+      <button class="card auto-btn" data-topic="kids" data-parts="2">👶 Kids Story (2 parts)</button>
+      <button class="card auto-btn" data-topic="mystery" data-parts="2">🔍 Mystery Thriller (2 parts)</button>
+    </div>
+  </section>
+
   <h2 class="sec">1️⃣ Category chuniye</h2>
   <div class="grid cats">
     ${CATEGORIES.map((c) => `
@@ -130,6 +158,16 @@ function viewHome() {
     <a class="btn" href="#/new/family?own=1">✍️ Apni story se video banayein</a>
   </div>`;
   document.getElementById('setCh')?.addEventListener('click', openSettings);
+  document.querySelectorAll('.auto-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      console.log('🎬 auto-btn clicked');
+      if (!ch) { toast('📺 First set your channel in ⚙️ Settings'); return; }
+      const topic = btn.dataset.topic;
+      const parts = parseInt(btn.dataset.parts) || 2;
+      console.log('🎬 Calling autoGenerate:', topic, parts);
+      autoGenerate(topic, parts);
+    });
+  });
 }
 
 // ---------- CATEGORY ----------
@@ -179,6 +217,7 @@ function viewSetup(catId, q) {
   const dance = c.mode === 'dance';
   const own = q.get('own') === '1';
   const topic = q.get('topic') || '';
+  const partsCountParam = parseInt(q.get('partsCount')) || 0;
   const durOpts = (fmt, sel) => (fmt === 'short' ? SHORT_DUR : LONG_DUR).map((d) => `<option value="${d}"${d === sel ? ' selected' : ''}>${fmtDur(d)}</option>`).join('');
   $app.innerHTML = `
   <a class="back" href="#/cat/${c.id}">← ${esc(c.name)}</a>
@@ -206,7 +245,7 @@ function viewSetup(catId, q) {
     </div>
     <div class="two">
       <label>Kitne parts? (series)
-        <select name="partsCount">${[1, 2, 3, 4, 5, 6, 7, 8, 10].map((n) => `<option value="${n}"${n === (dance ? 1 : 2) ? ' selected' : ''}>${n === 1 ? '1 (single video)' : `${n} parts`}</option>`).join('')}</select>
+        <select name="partsCount">${[1, 2, 3, 4, 5, 6, 7, 8, 10].map((n) => `<option value="${n}"${(partsCountParam && n === partsCountParam) || (n === (dance ? 1 : 2) && !partsCountParam) ? ' selected' : ''}>${n === 1 ? '1 (single video)' : `${n} parts`}</option>`).join('')}</select>
       </label>
       <label>Language
         <select name="language">${Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
@@ -219,12 +258,13 @@ function viewSetup(catId, q) {
       <label>${dance ? 'Voice' : 'Narrator voice (narrator / drama style ke liye)'}
         <select name="narratorGender"><option value="male">👨 Male (Madhur)</option><option value="female">👩 Female (Swara)</option></select>
       </label>
+      ${dance ? `<label class="check"><input type="checkbox" name="voiceLyrics" checked> 🎤 Lyrics ko AI voice se gaaye (har scene mein character ke sath)</label>` : ''}
     </div>
     ${dance ? '' : `<label>🎙️ Story kaise sunayi jaye (voice style)
       <select name="voiceStyle">
+        <option value="drama" selected>🎭 Drama – narrator + har character ki alag voice (RECOMMENDED)</option>
         <option value="storyteller">🧑 Ek insaan apni kahani khud sunata hai (first person – "Namaste dosto, main Raju hoon...")</option>
         <option value="narrator">📖 Ek narrator poori kahani sunata hai (third person)</option>
-        <option value="drama">🎭 Drama – narrator + har character ki alag voice</option>
       </select>
     </label>`}
     <label>🎥 Motion – AI person ko move karwana (hands, mouth, legs)
@@ -267,7 +307,7 @@ function viewSetup(catId, q) {
       topic: String(fd.get('topic') || '').trim() || custom.slice(0, 80) || cat.ideas[0],
       customStory: custom, format: fd.get('format'), duration: +fd.get('duration'),
       partsCount: +fd.get('partsCount'), language: fd.get('language'), style: fd.get('style'),
-      narratorGender: fd.get('narratorGender'), voiceStyle: fd.get('voiceStyle') || 'storyteller', music: fd.get('music'),
+      narratorGender: fd.get('narratorGender'), voiceStyle: fd.get('voiceStyle') || 'drama', music: fd.get('music'),
       voiceLyrics: fd.get('voiceLyrics') === 'on', motion: fd.get('motion') || 'free', partsData: {},
     };
     const file = f.musicFile?.files?.[0];
@@ -803,11 +843,71 @@ async function makeVideo(p, n) {
   }
 }
 
+// ---------- AUTO-DOWNLOAD & YOUTUBE UPLOAD ----------
+async function downloadPart(p, n, autoYoutube = false) {
+  const blob = await db.getBlob(`${p.id}/p${n}/video`);
+  if (!blob) return toast('❌ Video not ready');
+  const d = pd(p, n);
+  const fname = `${p.id}_part${n}.${d.ext || 'mp4'}`;
+  download(blob, fname);
+  if (autoYoutube) {
+    const accessToken = settings().youtubeToken;
+    if (!accessToken) return toast('⚠️ Set YouTube token in Settings first');
+    uploadToYouTube(p, n, blob, d.meta);
+  }
+}
+
+async function uploadToYouTube(p, n, videoBlob, meta) {
+  toast('📤 Uploading to YouTube...', 10000);
+  try {
+    const formData = new FormData();
+    formData.append('title', meta?.title || p.bible.title_roman);
+    formData.append('description', meta?.description || p.bible.logline);
+    formData.append('tags', (meta?.tags || []).slice(0, 20).join(','));
+    formData.append('video', videoBlob, `${p.id}_p${n}.mp4`);
+    formData.append('channel', channelOf());
+    const res = await fetch('/api/youtube-upload', { method: 'POST', body: formData, headers: keyHeaders() });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    toast(`✅ Uploaded to YouTube! https://youtu.be/${data.videoId}`, 8000);
+  } catch (err) {
+    toast(`❌ YouTube upload failed: ${err.message}`, 6000);
+  }
+}
+
+async function autoGenerateAndUpload(topic, partsCount) {
+  const ch = channelOf();
+  if (!ch) return toast('📺 Set channel name in Settings first', 4000);
+  if (!settings().youtubeToken) return toast('⚠️ Connect YouTube in Settings first', 4000);
+  toast(`⏳ Starting auto-generation: ${topic} (${partsCount} parts)...`, 3000);
+  setTimeout(() => { autoGenerate(topic, partsCount); }, 500);
+}
+
+// Auto-trigger next part when current part finishes
+setInterval(async () => {
+  if (!window.__autoGenProj) return;
+  const p = window.__autoGenProj;
+  for (let n = 1; n <= p.partsCount; n++) {
+    const d = pd(p, n);
+    if (d.status === 'done' && !d.autoDownloaded) {
+      d.autoDownloaded = true;
+      await downloadPart(p, n, !!settings().youtubeToken);
+      if (n < p.partsCount) {
+        const nextD = pd(p, n + 1);
+        if (nextD.status === 'new') {
+          toast(`📺 Starting Part ${n + 1}...`);
+          makeVideo(p, n + 1);
+        }
+      }
+    }
+  }
+}, 5000);
+
 // ---------- SETTINGS ----------
 const dlg = document.getElementById('settingsDlg');
 async function openSettings() {
   const s = settings(); const f = document.getElementById('settingsForm');
-  f.channel.value = s.channel || ''; f.quality.value = s.quality || 'hd'; f.geminiKey.value = s.geminiKey || '';
+  f.channel.value = s.channel || ''; f.quality.value = s.quality || 'hd'; f.geminiKey.value = s.geminiKey || ''; f.youtubeToken.value = s.youtubeToken || '';
   f.cfAccount.value = s.cfAccount || ''; f.cfToken.value = s.cfToken || ''; f.pollinationsKey.value = s.pollinationsKey || '';
   f.hfToken.value = s.hfToken || ''; f.falKey.value = s.falKey || ''; f.falModel.value = s.falModel || '';
   const est = await db.estimate();
@@ -819,7 +919,7 @@ dlg.addEventListener('close', () => {
   if (dlg.returnValue !== 'save') return;
   const f = document.getElementById('settingsForm');
   saveSettings({
-    channel: f.channel.value.replace(/^@/, '').trim(), quality: f.quality.value, geminiKey: f.geminiKey.value.trim(),
+    channel: f.channel.value.replace(/^@/, '').trim(), quality: f.quality.value, geminiKey: f.geminiKey.value.trim(), youtubeToken: f.youtubeToken?.value.trim(),
     cfAccount: f.cfAccount.value.trim(), cfToken: f.cfToken.value.trim(), pollinationsKey: f.pollinationsKey.value.trim(),
     hfToken: f.hfToken.value.trim(), falKey: f.falKey.value.trim(), falModel: f.falModel.value.trim(),
   });
@@ -831,4 +931,4 @@ db.persist?.().catch(() => {});
 route();
 if (!channelOf()) setTimeout(() => toast('📺 ⚙️ Settings mein apna channel name daalein', 4000), 800);
 // expose for debugging
-window.__studio = { db, jobs, sceneCount };
+window.__studio = { db, jobs, sceneCount, autoGenerate };

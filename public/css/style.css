@@ -198,3 +198,24 @@ details.card > summary { cursor: pointer; font-weight: 700; }
   .scene { flex-direction: column; }
   .simg { width: 100%; flex-direction: row; }
 }
+
+/* automation panel */
+.auto-gen { margin: 32px 0; padding: 24px; background: linear-gradient(135deg, rgba(255, 61, 110, 0.08), rgba(255, 154, 61, 0.08)); border: 2px solid var(--pri); border-radius: 18px; }
+.auto-gen h2 { margin-bottom: 16px; background: linear-gradient(90deg, var(--pri), var(--pri2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.autos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.auto-btn { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 18px; background: linear-gradient(135deg, var(--card) 0%, color-mix(in srgb, var(--card) 85%, var(--pri) 15%) 100%); border: 1px solid var(--pri); border-radius: 14px; cursor: pointer; transition: all 0.2s ease; overflow: hidden; min-height: 160px; }
+.auto-btn::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, transparent 0%, color-mix(in srgb, var(--pri) 10%, transparent) 100%); pointer-events: none; }
+.auto-btn:hover { transform: translateY(-4px); box-shadow: 0 12px 32px color-mix(in srgb, var(--pri) 25%, transparent); border-color: var(--pri2); }
+.auto-btn:active { transform: translateY(-2px); }
+.auto-btn > * { position: relative; z-index: 1; }
+.auto-btn .emoji { font-size: 36px; margin-bottom: 8px; }
+.auto-btn h3 { margin: 0 0 4px; font-size: 16px; color: var(--txt); }
+.auto-btn .sub { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.auto-btn .cta { margin-top: auto; padding: 8px 12px; background: linear-gradient(135deg, var(--pri), var(--pri2)); border: none; border-radius: 8px; color: #fff; font-weight: 700; cursor: pointer; font-size: 13px; transition: transform 0.15s; }
+.auto-btn .cta:hover { transform: scale(1.05); }
+.auto-btn .cta:active { transform: scale(0.98); }
+@media (max-width: 680px) {
+  .auto-gen { padding: 16px; }
+  .autos { grid-template-columns: 1fr; }
+  .auto-btn { min-height: 140px; padding: 14px; }
+}

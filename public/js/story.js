@@ -41,7 +41,7 @@ Return JSON: {"ideas": ["...", "..."]}`,
 }
 
 function charactersHint() {
-  return `"characters": [{"id":"c1","name":"Name in Roman letters","name_hi":"name in Devanagari","gender":"male|female","age":"child|young|adult|old","look":"ENGLISH ONLY (never Hindi/Devanagari). VERY detailed fixed appearance for an image AI so the face stays identical in every scene: age in years, Indian skin tone, face shape, eyes, hair style & colour, facial hair, body type, exact outfit with colours, accessories. Children must wear modest, fully covering, age-appropriate clothes."}]`;
+  return `"characters": [{"id":"c1","name":"Name in Roman letters","name_hi":"name in Devanagari","gender":"male|female","age":"child|young|adult|old","kind":"human|animal","species":"for animals: dog|cow|cat|parrot|monkey|goat|lion|elephant|rooster|horse|... (empty for humans)","look":"ENGLISH ONLY (never Hindi/Devanagari). VERY detailed fixed appearance for an image AI so the face stays identical in every scene: age in years, Indian skin tone, face shape, eyes, hair style & colour, facial hair, body type, exact outfit with colours, accessories. Children must wear modest, fully covering, age-appropriate clothes."}]`;
 }
 
 export async function createBible(p) {
@@ -60,7 +60,7 @@ It is a cheerful, wholesome, family-friendly dance / song video. Invent 1-2 cute
 Each part is a different dance/song episode.`
     : `Create a story bible for a ${p.format === 'short' ? 'YouTube Shorts' : 'long YouTube video'} story in the category "${cat.name}" (${cat.about}).
 Topic: ${p.topic}. Each part is about ${Math.round(p.duration)} seconds long. ${partsLine}
-Use 2-5 main characters (Indian names).${(p.voiceStyle || 'storyteller') === 'storyteller' ? ' The story is told in FIRST PERSON by ONE main character (the storyteller, e.g. "Namaste dosto, main Raju hoon..."). Put the storyteller FIRST in the characters list and set "teller" to their id.' : ' The narrator is not a character.'}`;
+Use 2-5 main characters (Indian names).${(p.voiceStyle || 'drama') === 'drama' ? ' Usually two (or more) people who TALK to each other; add one talking animal (cow, dog, parrot, monkey, goat, etc. with a cute name) when it fits the story, with kind "animal". The narrator is not a character.' : ''}${(p.voiceStyle || 'drama') === 'storyteller' ? ' The story is told in FIRST PERSON by ONE main character (the storyteller, e.g. "Namaste dosto, main Raju hoon..."). Put the storyteller FIRST in the characters list and set "teller" to their id.' : (p.voiceStyle || 'drama') === 'narrator' ? ' The narrator is not a character.' : ''}`;
   const bible = await chat(
     [
       { role: 'system', content: SYSTEM },
@@ -90,9 +90,12 @@ ${charactersHint()},
     let name = String(c.name || 'Character ' + (i + 1));
     const nameHi = String(c.name_hi || (DEV.test(name) ? name : ''));
     if (DEV.test(name) && p.language !== 'hi') name = 'Character ' + (i + 1);
-    return { id: c.id || 'c' + (i + 1), name, name_hi: nameHi, gender, age, look };
+    const species = String(c.species || '').toLowerCase().replace(/[^a-z ]/g, '').trim();
+    const kind = /animal/i.test(String(c.kind)) || (species && !/human|person|man|woman|boy|girl/.test(species)) ? 'animal' : 'human';
+    if (kind === 'animal' && species && !look.toLowerCase().includes(species)) look = `cute talking cartoon ${species}, ${look}`;
+    return { id: c.id || 'c' + (i + 1), name, name_hi: nameHi, gender, age, kind, species: kind === 'animal' ? species || 'animal' : '', look };
   });
-  if (!isDance && (p.voiceStyle || 'storyteller') === 'storyteller') {
+  if (!isDance && (p.voiceStyle || 'drama') === 'storyteller') {
     const t = bible.characters.find((c) => c.id === bible.teller) || bible.characters[0];
     bible.teller = t?.id || null;
   } else bible.teller = null;
@@ -133,8 +136,11 @@ function normScene(s, chars) {
 }
 
 function voiceRules(p) {
-  const style = p.voiceStyle || 'storyteller';
-  if (style === 'drama') return 'Mix narration with natural character dialogues (emotional, funny, dramatic). Short sentences that sound great when spoken.';
+  const style = p.voiceStyle || 'drama';
+  if (style === 'drama') {
+    const animals = p.bible.characters.filter((c) => c.kind === 'animal');
+    return `Write it like a real animated movie / cartoon episode with REAL DIALOGUES. The narrator opens the story like a kahani ("Ek baar ki baat hai, ek gaon mein do dost rehte the...") and later only links scenes with short lines. Most lines (at least 60%) are characters TALKING to each other in natural back-and-forth conversation (questions, answers, jokes, arguments, emotions), each line spoken by ONE character.${animals.length ? ` Animals talk too (${animals.map((c) => `${c.name} the ${c.species}`).join(', ')}): when an animal speaks, its line STARTS with its real sound written as a word (dog "Bhow bhow!", cow "Moooo!", cat "Meow!", parrot "Mitthu mitthu!", goat "Meeeh!", rooster "Kukdoo koo!", lion "Grrrr!", monkey "Ooo aaa!") and then it says a funny or wise sentence.` : ''} Short sentences that sound great when spoken.${partNo1(p).replace('introduces the storyteller', 'is the narrator opening the kahani')}`;
+  }
   if (style === 'narrator') return 'ONE narrator tells the whole story in third person like a professional Hindi kahani voice-over ("Ek gaon mein Raju naam ka ladka rehta tha..."). Retell what characters say inside the narration ("Raju ne kaha ki..."), or quote very short lines inside the narration. Warm, emotional, engaging tone.';
   const t = p.bible.characters.find((c) => c.id === p.bible.teller) || p.bible.characters[0];
   return `The WHOLE script is spoken by ONE person: ${t ? `${t.name} (${t.id})` : 'the main character'}, telling their OWN story in FIRST PERSON to the viewers, like a real person talking to camera ("Namaste dosto, main ${t?.name || 'Raju'} hoon. Aaj main aapko apni kahani sunata hoon...", "Maine galti se khidki tod di... phir maine socha..."). Use "main / mera / maine" (or "I / my" in English) and speak directly to the viewer sometimes ("aap sochiye..."). Retell what others said in own words ("Papa ne gusse mein kaha..."). Natural, emotional, honest storytelling.${partNo1(p)}`;
@@ -182,7 +188,7 @@ Write exactly ${n} scenes with about ${words} spoken words in total (each scene 
 ${voiceRules(p)}
 ${b === batches - 1 ? (isLast ? 'End the series with a satisfying ending and a small moral/emotional line.' : `End with a cliffhanger and a line like "Part ${partNo + 1} mein dekhiye...".`) : ''}
 ${LANG_RULES[p.language] || LANG_RULES.hinglish}
-${(p.voiceStyle || 'storyteller') === 'drama' ? `"speaker" is "narrator" or a character id (${p.bible.characters.map((c) => c.id).join(', ')}).` : '"speaker" is ALWAYS "narrator" (one single voice tells everything).'}
+${(p.voiceStyle || 'drama') === 'drama' ? `"speaker" is "narrator" or a character id (${p.bible.characters.map((c) => `${c.id} = ${c.name}${c.kind === 'animal' ? ' the ' + c.species : ''}`).join(', ')}). Use the character's id, not the name.` : '"speaker" is ALWAYS "narrator" (one single voice tells everything).'}
 Every line must be a COMPLETE, natural spoken sentence (subject + verb), 6-18 words, that sounds great read aloud. No stage directions, no emojis, no brackets.
 "visual" = English image prompt for this scene: what we see, camera angle, emotion on faces, lighting, background (do not describe text/letters). Mention characters by name.
 "mood" = one of: happy, sad, suspense, horror, comedy, epic, romantic, calm.
