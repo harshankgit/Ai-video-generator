@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Free AI story video & YouTube Shorts creator (Hindi/Hinglish)",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js"
   },
   "keywords": [],
   "author": "",
