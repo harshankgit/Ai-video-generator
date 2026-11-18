@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": "public",
+  "functions": {
+    "api/tts.js": { "maxDuration": 60 },
+    "api/llm.js": { "maxDuration": 120 },
+    "api/image.js": { "maxDuration": 90 }
+  }
+}
