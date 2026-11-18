@@ -7,3 +7,4 @@ node_modules/
 .codegraph
 .playwright-mcp/
 !.env.example
+.omo/
