@@ -4,6 +4,7 @@
   "functions": {
     "api/tts.js": { "maxDuration": 60 },
     "api/llm.js": { "maxDuration": 120 },
-    "api/image.js": { "maxDuration": 90 }
+    "api/image.js": { "maxDuration": 90 },
+    "api/motion.js": { "maxDuration": 300 }
   }
 }

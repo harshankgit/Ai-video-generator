@@ -143,14 +143,40 @@ export function imageSize(format, quality) {
   return quality === 'hd' ? { w: 1536, h: 864 } : { w: 1280, h: 720 };
 }
 
+const DEV_RE = /[\u0900-\u097F]+/g;
+const UNSAFE_KID = /\b(thumka\w*|hips?|hip[- ]?shak\w*|belly|midriff|navel|crop[- ]?top|sexy|seductive|sensual|bikini|cleavage|twerk\w*|sultry)\b/gi;
+
+function genderWord(c) {
+  const f = c.gender === 'female';
+  if (c.age === 'child') return `small ${f ? 'girl' : 'boy'} about 5 years old`;
+  if (c.age === 'old') return f ? 'old Indian woman' : 'old Indian man';
+  if (c.age === 'young') return f ? 'young Indian woman' : 'young Indian man';
+  return f ? 'Indian woman' : 'Indian man';
+}
+
 export function scenePrompt(p, scene) {
   const style = getStyle(p.style);
-  const chars = (p.bible?.characters || []).filter(
-    (c) => scene.characters?.includes(c.id) || (scene.visual || '').toLowerCase().includes(c.name.toLowerCase()),
+  const all = p.bible?.characters || [];
+  let chars = all.filter(
+    (c) => scene.characters?.includes(c.id) || (scene.visual || '').toLowerCase().includes(String(c.name).toLowerCase()),
   );
-  const looks = chars.map((c) => `${c.name}: ${c.look}`).join('; ');
-  const extra = p.mode === 'dance' ? 'dynamic dance pose, motion, joyful, vibrant colors, ' : '';
-  const prompt = `${style.prompt}, ${extra}${scene.visual}. ${looks ? 'Characters (keep exactly the same face and outfit): ' + looks + '. ' : ''}Setting: ${p.bible?.setting || 'India'}. Indian people, expressive faces, highly detailed, cinematic composition, no text, no letters, no watermark`;
+  if (!chars.length && p.mode === 'dance') chars = all.slice(0, 2);
+  // storyteller videos: the teller is in the scene when nobody else is named
+  if (!chars.length && p.bible?.teller) chars = all.filter((c) => c.id === p.bible.teller);
+  const kids = chars.some((c) => c.age === 'child') || (p.mode === 'dance' && (!chars.length || p.category === 'rhymes'));
+  const clean = (t) => {
+    t = String(t || '').replace(DEV_RE, ' ');
+    if (kids) t = t.replace(UNSAFE_KID, 'playful').replace(/\bsaree|sari\b/gi, 'frock');
+    return t;
+  };
+  const looks = chars
+    .map((c) => `${c.name} (${genderWord(c)}): ${clean(c.look)}`)
+    .join('; ');
+  const extra = p.mode === 'dance' ? 'joyful playful dance pose, motion, vibrant colors, ' : '';
+  const safe = kids
+    ? 'wholesome family-friendly kids cartoon, small cute Indian child about 5 years old, toddler body proportions, chubby cheeks, big innocent eyes, fully clothed in a modest outfit covering shoulders, arms and belly, '
+    : '';
+  const prompt = `${style.prompt}, ${safe}${extra}${clean(scene.visual)}. ${looks ? 'Characters (keep exactly the same face and outfit): ' + looks + '. ' : ''}Setting: ${clean(p.bible?.setting) || 'India'}. Indian ${kids ? 'kids' : 'people'}, expressive faces, highly detailed, cinematic composition, no text, no letters, no watermark`;
   return prompt.replace(/\s+/g, ' ').slice(0, 1400);
 }
 
@@ -202,7 +228,7 @@ export async function sceneImage(p, partNo, i, scene, { quality, force, signal }
     if (c) return c;
   }
   const size = imageSize(p.format, quality);
-  const seed = (parseInt(hashStr(p.id), 36) % 900000) + i * 7 + partNo * 1000 + (scene.seedBump || 0) * 13;
+  const seed = (parseInt(hashStr(p.id), 36) % 900000) + (p.mode === 'dance' ? 0 : i * 7) + partNo * 1000 + (scene.seedBump || 0) * 13;
   const blob = await fetchImage(scenePrompt(p, scene), { ...size, seed }, signal);
   await db.putBlob(key, blob);
   return blob;

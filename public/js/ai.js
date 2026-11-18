@@ -25,6 +25,8 @@ export function keyHeaders() {
     h['x-cf-account'] = s.cfAccount.trim();
     h['x-cf-token'] = s.cfToken.trim();
   }
+  if (s.hfToken) h['x-hf-token'] = s.hfToken.trim();
+  if (s.falKey) h['x-fal-key'] = s.falKey.trim();
   return h;
 }
 

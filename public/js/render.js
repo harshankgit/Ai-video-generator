@@ -224,12 +224,17 @@ function buildDanceTimeline(o) {
     sfx.push({ type: 'impact', t: 0.02 });
     t = len;
   }
+  const target = Math.max(8, (o.duration || 30) - 2.6);
+  // fit each scene to the time budget the user selected (2–4 beats each)
+  const per = Math.min(4 * beat, Math.max(2 * beat, Math.floor((target - t) / n / beat) * beat));
   o.scenes.forEach((sc, i) => {
     const ly = sc.lyric;
-    let len = 4 * beat;
+    let len = per;
+    const voiced = ly && ly.buffer;
+    if (i >= 3 && !voiced && t + len > target + 0.01) return; // over budget: skip extra scenes
     if (ly && (ly.text || ly.buffer)) {
-      const d = ly.buffer ? ly.buffer.duration : Math.max(1.6, lineDur(ly, o.lang) * 0.8);
-      len = fitBeats(d);
+      const d = ly.buffer ? ly.buffer.duration : Math.max(1.2, Math.min(per - 0.2, lineDur(ly, o.lang) * 0.8));
+      len = ly.buffer ? fitBeats(d) : Math.max(per, Math.ceil((d + 0.2) / beat) * beat);
       if (ly.buffer) voices.push({ start: t + 0.12, buffer: ly.buffer });
       addCues(cues, t + 0.12, t + 0.12 + d, ly.text, 4, { lyric: true, color: LYRIC_COLORS[(i + 1) % LYRIC_COLORS.length] });
     }
@@ -237,7 +242,6 @@ function buildDanceTimeline(o) {
     sfx.push({ type: 'pop', t: t });
     t += len;
   });
-  const target = Math.max(8, (o.duration || 30) - 2.6);
   let j = 0;
   while (t + 4 * beat <= target + 0.01 && j < 200) {
     const len = 4 * beat;
@@ -381,6 +385,52 @@ class Painter {
     }));
   }
 
+  // ---- real-motion clips (o.clips[sceneIndex] = mp4 Blob) ----
+  async prepare(t) {
+    const clips = this.o.clips;
+    if (!clips || !this.M) return;
+    const segs = this.tl.segs;
+    const i = this.seg(t);
+    const want = new Set();
+    for (const s of [segs[i - 1], segs[i], segs[i + 1]]) {
+      if (s && (s.type === 'scene' || s.type === 'dance') && clips[s.img]) want.add(s.img);
+    }
+    this.clipCache = this.clipCache || new Map();
+    for (const k of want) if (!this.clipCache.has(k)) this.clipCache.set(k, await this.loadClip(clips[k]));
+    // evict clips not needed any more (keep memory low)
+    for (const k of [...this.clipCache.keys()]) if (!want.has(k) && this.clipCache.size > 3) this.clipCache.delete(k);
+  }
+
+  async loadClip(blob) {
+    try {
+      const M = this.M;
+      const input = new M.Input({ formats: M.ALL_FORMATS, source: new M.BlobSource(blob) });
+      const track = await input.getPrimaryVideoTrack();
+      if (!track || !(await track.canDecode())) return null;
+      const first = await track.getFirstTimestamp();
+      const sink = new M.CanvasSink(track, { poolSize: 0 });
+      const frames = [];
+      for await (const fr of sink.canvases()) frames.push({ c: fr.canvas, t: fr.timestamp - first });
+      try { input.dispose?.(); } catch {}
+      if (frames.length < 2) return null;
+      const last = frames[frames.length - 1];
+      return { frames, dur: Math.max(0.2, last.t) };
+    } catch (e) { console.warn('clip decode failed', e); return null; }
+  }
+
+  clipFrame(k, local) {
+    const cl = this.clipCache?.get(k);
+    if (!cl) return null;
+    const D = cl.dur;
+    // ping-pong loop, slightly slowed so motion looks natural on longer scenes
+    let x = (local * 0.85) % (2 * D);
+    if (x > D) x = 2 * D - x;
+    const f = cl.frames;
+    let lo = 0, hi = f.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (f[m].t <= x) lo = m; else hi = m - 1; }
+    return f[lo].c;
+  }
+
   seg(t) {
     const segs = this.tl.segs;
     let i = this.segIdx;
@@ -396,6 +446,8 @@ class Painter {
     const { ctx, W, H } = this;
     const kb = seg.kb || KB[0];
     const p = ease((t - seg.start) / Math.max(0.1, seg.end - seg.start));
+    const clip = this.clipFrame(seg.img, t - seg.start);
+    if (clip) { drawCover(ctx, clip, W, H, 1.02 + 0.05 * p, 0, 0); return; }
     drawCover(ctx, this.img(seg.img), W, H, kb.z0 + (kb.z1 - kb.z0) * p, kb.x0 + (kb.x1 - kb.x0) * p, kb.y0 + (kb.y1 - kb.y0) * p);
   }
 
@@ -410,7 +462,8 @@ class Painter {
     const bounce = -Math.abs(Math.sin((t / beat) * Math.PI)) * H * 0.012;
     const flip = seg.k % 2 === 1;
     const shakeX = punch > 0.6 && seg.k % 3 === 0 ? (rand(Math.floor(t * 60)) - 0.5) * 0.04 : 0;
-    drawCover(ctx, this.img(seg.img), W, H, zoom, shakeX, 0, flip, rot, bounce);
+    const clip = this.clipFrame(seg.img, local);
+    drawCover(ctx, clip || this.img(seg.img), W, H, clip ? zoom - 0.08 : zoom, shakeX, 0, flip, rot, bounce);
     // segment flash
     const f = 1 - local / 0.16;
     if (f > 0) { ctx.fillStyle = `rgba(255,255,255,${0.55 * f})`; ctx.fillRect(0, 0, W, H); }
@@ -533,7 +586,7 @@ class Painter {
       const slide = (1 - ease((t - ltStart) / 0.5)) * -60 * U;
       ctx.save();
       ctx.globalAlpha = a;
-      const x = 60 * U + slide, y = H - 260 * U;
+      const x = 60 * U + slide, y = 60 * U; // top-left, so it never covers the subtitles
       const bw = this.drawBadge(o.partLabel || 'STORY', x, y, Math.round(30 * U));
       const { size, lines } = fitFont(ctx, o.title, 800, Math.round(56 * U), W * 0.6, 1, 24);
       ctx.font = `800 ${size}px ${FONT}`;
@@ -797,6 +850,7 @@ export async function renderVideo(o) {
   canvas.width = W; canvas.height = H;
   const tl = buildTimeline(o);
   const painter = new Painter(canvas, tl, o);
+  painter.M = M;
   const bitrate = Math.round((o.format === 'long' ? 5e6 : 6e6) * (o.quality === 'sd' ? 0.55 : 1));
 
   const vCodec = await M.getFirstEncodableVideoCodec(['avc', 'vp9', 'av1', 'vp8'], { width: W, height: H, bitrate });
@@ -832,6 +886,7 @@ export async function renderVideo(o) {
       for (; frame < fEnd; frame++) {
         if (o.signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
         const t = frame / FPS;
+        if (o.clips) await painter.prepare(t);
         painter.draw(t);
         await vs.add(t, 1 / FPS);
         if (frame % 15 === 0) report(frame / totalFrames, `Video render: ${Math.floor(t)}s / ${Math.ceil(T)}s`);

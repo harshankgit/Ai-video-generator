@@ -61,11 +61,12 @@ async function pollinationsFree(prompt, w, h, seed) {
   const q = new URLSearchParams({ width: w, height: h, seed, nologo: 'true', model: 'flux' });
   const r = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.slice(0, 1200))}?${q}`, {
     headers: { 'User-Agent': 'ai-story-video-studio/1.0' },
+    signal: AbortSignal.timeout(80000),
   });
   const type = r.headers.get('content-type') || '';
   if (r.ok && type.startsWith('image/')) return Buffer.from(await r.arrayBuffer());
   const text = await r.text();
-  if (r.status === 402 || r.status === 429 || /FREE_LIMIT|rate/i.test(text)) {
+  if (r.status === 402 || r.status === 429 || r.status === 503 || /FREE_LIMIT|rate|at its limit/i.test(text)) {
     const m = /Retry after (\d+)\s*s/i.exec(text);
     throw new RateLimit(m ? Number(m[1]) + 2 : 30);
   }

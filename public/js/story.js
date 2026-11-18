@@ -41,7 +41,7 @@ Return JSON: {"ideas": ["...", "..."]}`,
 }
 
 function charactersHint() {
-  return `"characters": [{"id":"c1","name":"Name","gender":"male|female","age":"child|young|adult|old","look":"VERY detailed fixed appearance in English for an image AI so the face stays identical in every scene: age in years, Indian skin tone, face shape, eyes, hair style & colour, facial hair, body type, exact outfit with colours, accessories"}]`;
+  return `"characters": [{"id":"c1","name":"Name in Roman letters","name_hi":"name in Devanagari","gender":"male|female","age":"child|young|adult|old","look":"ENGLISH ONLY (never Hindi/Devanagari). VERY detailed fixed appearance for an image AI so the face stays identical in every scene: age in years, Indian skin tone, face shape, eyes, hair style & colour, facial hair, body type, exact outfit with colours, accessories. Children must wear modest, fully covering, age-appropriate clothes."}]`;
 }
 
 export async function createBible(p) {
@@ -56,7 +56,7 @@ export async function createBible(p) {
       : 'It is a single complete video with a start, middle and end.';
   const ask = isDance
     ? `Create a concept for a trending ${p.format === 'short' ? 'YouTube Short' : 'YouTube video'} in the category "${cat.name}": ${p.topic}.
-It is a cheerful dance / song video. Invent 1-3 cute original characters (e.g. a small kid, a baby, a grandmother or cartoon animals). ${partsLine}
+It is a cheerful, wholesome, family-friendly dance / song video. Invent 1-2 cute original characters (e.g. a small kid aged 4-7, a baby, a grandmother or cartoon animals). Kids wear modest, fully covering traditional or party clothes (frock / kurta pajama / lehenga with full blouse). ${partsLine}
 Each part is a different dance/song episode.`
     : `Create a story bible for a ${p.format === 'short' ? 'YouTube Shorts' : 'long YouTube video'} story in the category "${cat.name}" (${cat.about}).
 Topic: ${p.topic}. Each part is about ${Math.round(p.duration)} seconds long. ${partsLine}
@@ -77,13 +77,21 @@ ${charactersHint()},
     ],
     { validate: (o) => o.title && Array.isArray(o.characters) && Array.isArray(o.parts) && o.parts.length },
   );
-  bible.characters = bible.characters.slice(0, 6).map((c, i) => ({
-    id: c.id || 'c' + (i + 1),
-    name: String(c.name || 'Character ' + (i + 1)),
-    gender: /f/i.test(c.gender) ? 'female' : 'male',
-    age: ['child', 'young', 'adult', 'old'].includes(c.age) ? c.age : 'adult',
-    look: String(c.look || ''),
-  }));
+  const DEV = /[\u0900-\u097F]/;
+  bible.characters = bible.characters.slice(0, 6).map((c, i) => {
+    const gender = /^f|female|girl|woman|ladki|aurat/i.test(String(c.gender)) ? 'female' : 'male';
+    const age = ['child', 'young', 'adult', 'old'].includes(c.age) ? c.age : 'adult';
+    let look = String(c.look || '');
+    if (DEV.test(look)) look = look.replace(/[\u0900-\u097F]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (look.length < 25) {
+      const who = { child: gender === 'female' ? 'little Indian girl about 6 years old' : 'little Indian boy about 6 years old', young: `young Indian ${gender === 'female' ? 'woman' : 'man'} about 22 years old`, adult: `Indian ${gender === 'female' ? 'woman' : 'man'} about 40 years old`, old: `elderly Indian ${gender === 'female' ? 'grandmother' : 'grandfather'} about 70 years old` }[age];
+      look = `${who}, ${look}`.replace(/,\s*$/, '');
+    }
+    let name = String(c.name || 'Character ' + (i + 1));
+    const nameHi = String(c.name_hi || (DEV.test(name) ? name : ''));
+    if (DEV.test(name) && p.language !== 'hi') name = 'Character ' + (i + 1);
+    return { id: c.id || 'c' + (i + 1), name, name_hi: nameHi, gender, age, look };
+  });
   if (!isDance && (p.voiceStyle || 'storyteller') === 'storyteller') {
     const t = bible.characters.find((c) => c.id === bible.teller) || bible.characters[0];
     bible.teller = t?.id || null;
@@ -188,6 +196,17 @@ Return JSON: {"scenes":[{"visual":"...","mood":"...","characters":["c1"],"lines"
   return { scenes };
 }
 
+const FILL_LYRICS = [
+  { hi: 'हाथ ऊपर, झूमो सब!', roman: 'Haath upar, jhoomo sab!' },
+  { hi: 'गोल गोल घूमो रे!', roman: 'Gol gol ghoomo re!' },
+  { hi: 'ताली बजाओ, मस्ती में!', roman: 'Taali bajao, masti mein!' },
+  { hi: 'उछलो कूदो, नाचो गाओ!', roman: 'Uchhlo koodo, naacho gaao!' },
+  { hi: 'दाएँ चलो, बाएँ चलो!', roman: 'Daayein chalo, baayein chalo!' },
+  { hi: 'मुस्कुराओ, खुश हो जाओ!', roman: 'Muskurao, khush ho jao!' },
+  { hi: 'सब मिलकर नाचें आज!', roman: 'Sab milkar naachein aaj!' },
+  { hi: 'रुक जाओ... पोज़!', roman: 'Ruk jao... pose!' },
+];
+
 export async function createDanceScript(p, partNo) {
   const part = p.bible.parts[partNo - 1];
   const n = sceneCount(p.format, p.duration, 'dance');
@@ -199,21 +218,29 @@ export async function createDanceScript(p, partNo) {
         content: `${bibleText(p)}
 
 Create PART ${partNo} "${part.title}" - ${part.summary}
-It is a ${Math.round(p.duration)}-second cheerful dance / song video with original lyrics.
+It is a ${Math.round(p.duration)}-second cheerful, wholesome, family-friendly dance / song video with ORIGINAL lyrics (a mini song with verses, not one repeated line).
+If the character is a child: a small innocent kid (4-7 years), playful kid moves only, modest fully covering clothes.
 ${LANG_RULES[p.language] || LANG_RULES.hinglish}
 Return JSON:
 {"hook":{"hi":"short exciting spoken intro (max 8 words)","roman":"..."},
-"scenes":[{"visual":"English image prompt: the character(s) in a specific energetic dance pose / moment, expression, outfit, background, lighting","characters":["c1"],"lyric":{"hi":"one short original catchy lyric line (3-7 words)","roman":"..."}}],
+"scenes":[{"visual":"ENGLISH image prompt: the character(s) in a specific playful dance pose / moment, happy expression, same outfit, background, lighting","characters":["c1"],"lyric":{"hi":"one short original catchy lyric line (3-7 words), DIFFERENT for every scene","roman":"..."}}],
 "outro":{"hi":"short spoken line asking to like & subscribe (max 10 words)","roman":"..."}}
-Exactly ${n} scenes, every pose different (jump, spin, hands up, side step, clap, bhangra arms, thumka, freeze pose...), same characters and outfits in all scenes. Lyrics should repeat a simple hook like a real kids song.`,
+Exactly ${n} scenes, every pose different (jump, spin, hands up, side step, clapping, bhangra arms, twirl, wave, freeze pose...), same characters and outfits in all scenes. Every scene has a DIFFERENT lyric line that continues the song like verses of a real kids song (the chorus line may appear at most twice). "visual" must be in English only.`,
       },
     ],
     { validate: (o) => Array.isArray(o.scenes) && o.scenes.length },
   );
   const chars = p.bible.characters;
+  const seen = new Map();
+  let k = 0;
   const scenes = res.scenes.map((s) => {
     const sc = normScene({ ...s, mood: 'dance', lines: [] }, chars);
-    sc.lyric = { hi: String(s.lyric?.hi || s.lyric?.roman || ''), roman: String(s.lyric?.roman || s.lyric?.hi || '') };
+    let ly = { hi: String(s.lyric?.hi || s.lyric?.roman || ''), roman: String(s.lyric?.roman || s.lyric?.hi || '') };
+    const key = (ly.roman || ly.hi).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    const c = (seen.get(key) || 0) + 1;
+    seen.set(key, c);
+    if (!key || c > 2) ly = FILL_LYRICS[k++ % FILL_LYRICS.length];
+    sc.lyric = { ...ly };
     return sc;
   });
   const line = (o) => (o && (o.hi || o.roman) ? { speaker: 'narrator', hi: String(o.hi || o.roman), roman: String(o.roman || o.hi) } : null);
@@ -238,8 +265,9 @@ Series: ${p.bible.title_roman || p.bible.title} (${p.bible.title}). ${p.partsCou
 Story: ${part.summary}
 Script sample: ${sample}
 Channel: ${channel || 'our channel'}
+${p.language === 'hi' ? 'Write title, description and hook in Hindi (Devanagari) but thumbnail_text may be Roman.' : 'IMPORTANT: write EVERY field in ROMAN (Latin) letters only - NO Devanagari script at all.'}
 Return JSON:
-{"title":"viral clickable title, max 70 chars, Hinglish with 1-2 emojis${p.partsCount > 1 ? `, include "Part ${partNo}"` : ''}${isShort ? ', end with #shorts' : ''}",
+{"title":"viral clickable title, max 70 chars, ${p.language === 'en' ? 'English' : p.language === 'hi' ? 'Hindi' : 'Roman Hinglish'} with 1-2 emojis${p.partsCount > 1 ? `, include "Part ${partNo}"` : ''}${isShort ? ', end with #shorts' : ''}",
 "description":"3 short paragraphs in Hinglish: hook, what happens (no spoilers of the ending), call to action to like, share, subscribe${p.partsCount > 1 ? ' and watch the next part' : ''}. Add timestamps-free text, no links.",
 "tags":["15-25 search tags, Hindi + English, short phrases"],
 "hashtags":["#5-8 hashtags"],
@@ -257,13 +285,25 @@ Return JSON:
     .filter((h) => h.length > 1);
   if (isShort && !hashtags.some((h) => h.toLowerCase() === '#shorts')) hashtags.unshift('#shorts');
   hashtags = [...new Set(hashtags)].slice(0, 10);
+  const DEVN = /[\u0900-\u097F]/;
+  const roman = p.language !== 'hi';
+  const baseTitle = p.bible.title_roman || part?.title || 'Kahani';
+  let title = String(res.title || '').trim();
+  if (!title || (roman && DEVN.test(title)))
+    title = `${baseTitle}${p.partsCount > 1 ? ` | Part ${partNo}` : ''} ✨${isShort ? ' #shorts' : ''}`;
+  let thumb = String(res.thumbnail_text || '').trim();
+  if (!thumb || DEVN.test(thumb)) thumb = baseTitle;
+  let hook = String(res.hook_text || '').trim();
+  if (!hook || (roman && DEVN.test(hook))) hook = thumb;
+  let description = String(res.description || '');
+  if (roman && DEVN.test(description)) description = `${baseTitle}${p.partsCount > 1 ? ` - Part ${partNo}` : ''}\n\n${part?.summary && !DEVN.test(part.summary) ? part.summary : p.bible.logline && !DEVN.test(p.bible.logline) ? p.bible.logline : ''}\n\nVideo pasand aaye to Like, Share aur Subscribe zaroor karein!`;
   return {
-    title: String(res.title).slice(0, 100),
-    description: String(res.description),
+    title: title.slice(0, 100),
+    description,
     tags: [...new Set(tags)].slice(0, 30),
     hashtags,
-    thumbnail_text: String(res.thumbnail_text || p.bible.title_roman || '').slice(0, 40),
-    hook_text: String(res.hook_text || res.thumbnail_text || '').slice(0, 50),
+    thumbnail_text: thumb.slice(0, 40),
+    hook_text: hook.slice(0, 50),
   };
 }
 

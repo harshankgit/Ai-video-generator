@@ -7,14 +7,16 @@ import tts from './api/tts.js';
 import llm from './api/llm.js';
 import image from './api/image.js';
 import config from './api/config.js';
+import motion from './api/motion.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '8mb' }));
 
 app.all('/api/tts', tts);
 app.all('/api/llm', llm);
 app.all('/api/image', image);
+app.all('/api/motion', motion);
 app.get('/api/config', config);
 app.use(express.static(path.join(__dirname, 'public')));
 

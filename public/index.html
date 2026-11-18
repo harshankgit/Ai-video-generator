@@ -51,6 +51,19 @@
           <input name="pollinationsKey" placeholder="sk_..." autocomplete="off" />
         </label>
       </details>
+      <details class="keys">
+        <summary>🎥 Real motion video (person moves hands / mouth / legs)</summary>
+        <label>Hugging Face token – FREE (huggingface.co/settings/tokens)
+          <input name="hfToken" placeholder="hf_... (free account ≈ 4-6 motion clips / day)" autocomplete="off" />
+          <small>Bina token ke bhi try hota hai (anonymous ≈ 2 min GPU/day). Quota khatam → baaki scenes image-motion se banenge.</small>
+        </label>
+        <label>fal.ai API key – PAID (real-life video every scene)
+          <input name="falKey" placeholder="fal.ai/dashboard/keys" autocomplete="off" />
+        </label>
+        <label>fal.ai model
+          <input name="falModel" placeholder="fal-ai/kling-video/o3/standard/image-to-video" autocomplete="off" />
+        </label>
+      </details>
       <div class="storage" id="storageInfo"></div>
       <div class="row end">
         <button class="btn ghost" value="cancel" type="submit">Cancel</button>

@@ -9,6 +9,7 @@ Create **YouTube Shorts (9:16)** and **long story videos (16:9)** fully with AI 
 - Original background music generated in the browser (no copyright) or upload your own (e.g. YouTube Audio Library)
 - YouTube-ready **title, description, tags, hashtags and thumbnail**
 - Download MP4 + thumbnail + text. Everything is saved in your browser (IndexedDB) — stays after download, delete anytime.
+- **Real motion video** (person moves hands, legs, mouth): FREE mode = Hugging Face Wan 2.2 image-to-video (~4-6 clips/day with a free HF token, other scenes use Ken-Burns) · PAID mode = fal.ai (Kling etc.) real-life motion for every scene
 
 ## How it works (all free)
 
@@ -19,7 +20,8 @@ Create **YouTube Shorts (9:16)** and **long story videos (16:9)** fully with AI 
 | Voice | Microsoft Edge neural TTS (free, Hindi voices Madhur / Swara + multilingual) |
 | Music + SFX | Generated in the browser (Web Audio) – original, copyright free |
 | Video render | In your browser (Canvas + WebCodecs via Mediabunny) → MP4 |
-| Hosting | Vercel Hobby (free) – static site + 4 small serverless functions |
+| Real motion (optional) | FREE: Hugging Face ZeroGPU Space Wan 2.2 (free HF token, daily GPU quota) · PAID: fal.ai key |
+| Hosting | Vercel Hobby (free) – static site + 5 small serverless functions |
 
 Use **Chrome or Edge on desktop** for rendering (needs WebCodecs).
 
@@ -38,6 +40,8 @@ npm start          # http://localhost:3000
    - `GEMINI_API_KEY` – free from https://aistudio.google.com/apikey (fast + better Hindi stories)
    - `CF_ACCOUNT_ID` and `CF_API_TOKEN` – free Cloudflare account → *AI → Workers AI → Use REST API* (fast images, ~100+ / day free)
    - `POLLINATIONS_KEY` – optional key from https://enter.pollinations.ai
+   - `HF_TOKEN` – free Hugging Face token (https://huggingface.co/settings/tokens) for FREE real motion clips
+   - `FAL_KEY` (+ optional `FAL_MODEL`) – paid fal.ai key for real-life motion in every scene
    Then redeploy. Keys can also be entered per-browser in ⚙️ Settings instead.
 
 ## YouTube tips

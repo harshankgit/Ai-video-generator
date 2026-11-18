@@ -8,6 +8,7 @@ import {
 import { ALL_VOICES, voiceLabel, assignVoices, ttsBlob, decodeAudio, pool, sceneImage, thumbImage, hashStr } from './media.js';
 import { MUSIC_MOODS, MOOD_KEYS, bpmOf, dominantMood, getMusicLoop, previewMood } from './music.js';
 import { renderVideo, composeThumbnail, ensureFonts } from './render.js';
+import { sceneClip, QuotaError } from './motion.js';
 
 const $app = document.getElementById('app');
 const COLORS = ['#FFD54F', '#4FC3F7', '#F48FB1', '#A5D6A7', '#CE93D8', '#FFAB91', '#80DEEA', '#E6EE9C'];
@@ -29,6 +30,22 @@ function imgRep(i, n, cap) {
   const g = Math.floor((i * cap) / n);
   return Math.ceil((g * n) / cap);
 }
+/** Used only if every AI image failed: a colourful card so the video still renders. */
+async function placeholderImage(p, quality) {
+  const long = p.format === 'long';
+  const [w, h] = long ? (quality === 'hd' ? [1536, 864] : [1280, 720]) : quality === 'hd' ? [864, 1536] : [720, 1280];
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const col = getCategory(p.category)?.color || '#ff3d6e';
+  const gr = g.createLinearGradient(0, 0, w, h);
+  gr.addColorStop(0, col); gr.addColorStop(1, '#120a2a');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `${Math.round(Math.min(w, h) * 0.3)}px system-ui, sans-serif`;
+  g.fillText(getCategory(p.category)?.emoji || '🎬', w / 2, h * 0.42);
+  return createImageBitmap(c);
+}
 // Show free-limit countdown messages on every running job
 onWait((msg) => {
   for (const [k, j] of jobs) {
@@ -43,7 +60,7 @@ onWait((msg) => {
 // ---------- helpers ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtDur = (s) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60}s` : ''}`);
-const slug = (s) => String(s || 'video').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '').slice(0, 60) || 'video';
+const slug = (s) => String(s || 'video').replace(/[^\p{L}\p{M}\p{N}]+/gu, '_').replace(/^_|_$/g, '').slice(0, 60) || 'video';
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 function objUrl(blob) { const u = URL.createObjectURL(blob); urls.add(u); return u; }
 function freeUrls() { for (const u of urls) URL.revokeObjectURL(u); urls.clear(); }
@@ -210,6 +227,13 @@ function viewSetup(catId, q) {
         <option value="drama">🎭 Drama – narrator + har character ki alag voice</option>
       </select>
     </label>`}
+    <label>🎥 Motion – AI person ko move karwana (hands, mouth, legs)
+      <select name="motion">
+        <option value="free" selected>🆓 FREE real motion (Hugging Face Wan 2.2 – roz ~4-6 clips free, baaki scenes zoom/pan)</option>
+        <option value="paid">💎 PAID real-life video har scene (fal.ai key – Settings)</option>
+        <option value="none">🖼 No motion (sirf images + zoom/pan, sabse fast)</option>
+      </select>
+    </label>
     <div class="two">
       <label>Background music (copyright-free, AI generated)
         <select name="music">
@@ -244,7 +268,7 @@ function viewSetup(catId, q) {
       customStory: custom, format: fd.get('format'), duration: +fd.get('duration'),
       partsCount: +fd.get('partsCount'), language: fd.get('language'), style: fd.get('style'),
       narratorGender: fd.get('narratorGender'), voiceStyle: fd.get('voiceStyle') || 'storyteller', music: fd.get('music'),
-      voiceLyrics: fd.get('voiceLyrics') === 'on', partsData: {},
+      voiceLyrics: fd.get('voiceLyrics') === 'on', motion: fd.get('motion') || 'free', partsData: {},
     };
     const file = f.musicFile?.files?.[0];
     if (p.music === 'upload') {
@@ -333,6 +357,13 @@ async function viewProject(id) {
         <option value="none">🔇 None</option>
       </select>
     </label>
+    <label class="inline">🎥 Motion
+      <select id="motionSel">
+        <option value="free">🆓 Free real motion</option>
+        <option value="paid">💎 Paid (fal.ai)</option>
+        <option value="none">🖼 Off</option>
+      </select>
+    </label>
     <button class="btn small ghost" id="musicPrev" type="button">▶ Preview</button>
     <label class="btn small ghost file">📁 Upload music<input type="file" id="musicUp" accept="audio/*" hidden></label>
     <button class="btn small danger" id="delProj" type="button">🗑 Delete</button>
@@ -366,6 +397,9 @@ async function viewProject(id) {
   const ms = document.getElementById('musicSel');
   ms.value = p.music || 'auto';
   ms.onchange = () => { p.music = ms.value; saveSoon(); };
+  const mo = document.getElementById('motionSel');
+  mo.value = p.motion || 'none';
+  mo.onchange = () => { p.motion = mo.value; saveSoon(); };
   let stopPrev = null;
   document.getElementById('musicPrev').onclick = async (e) => {
     if (stopPrev) { stopPrev(); stopPrev = null; e.target.textContent = '▶ Preview'; return; }
@@ -511,7 +545,7 @@ async function renderScriptEditor(p, n, box) {
         </div>
       </div>`).join('')}`;
   const touch = () => { if (d.status === 'done') d.status = 'script'; saveSoon(); };
-  box.querySelectorAll('[data-visual]').forEach((t) => (t.oninput = () => { sc[+t.dataset.visual].visual = t.value; sc[+t.dataset.visual].imgDirty = true; touch(); }));
+  box.querySelectorAll('[data-visual]').forEach((t) => (t.oninput = () => { const s = sc[+t.dataset.visual]; s.visual = t.value; s.imgDirty = true; s.clipDirty = true; touch(); }));
   box.querySelectorAll('[data-l]').forEach((t) => (t.oninput = () => { const [i, j] = t.dataset.l.split('.').map(Number); sc[i].lines[j][t.dataset.f] = t.value; touch(); }));
   box.querySelectorAll('[data-ly]').forEach((t) => (t.oninput = () => { const s = sc[+t.dataset.ly]; s.lyric ||= {}; s.lyric[t.dataset.f] = t.value; touch(); }));
   box.querySelectorAll('[data-reimg]').forEach((btn) => (btn.onclick = async () => {
@@ -519,7 +553,7 @@ async function renderScriptEditor(p, n, box) {
     s.seedBump = (s.seedBump || 0) + 1; s.imgDirty = false; btn.textContent = '⏳'; btn.disabled = true;
     try {
       const bl = await sceneImage(p, n, i, s, { quality: settings().quality, force: true });
-      s.ownImg = true;
+      s.ownImg = true; s.clipDirty = true;
       box.querySelector(`[data-img="${i}"]`).src = objUrl(bl); touch();
     } catch (err) { toast('❌ ' + err.message); }
     btn.textContent = '🔄 New image'; btn.disabled = false;
@@ -619,19 +653,67 @@ async function makeVideo(p, n) {
     d.imgCap = cap;
     const images = new Array(scenes.length);
     const need = [...new Set(scenes.map((s, i) => (s.ownImg ? i : imgRep(i, scenes.length, cap))))];
-    const bitmaps = {};
+    const bitmaps = {}; const blobs = {};
     let done = 0;
     P(0.08, `🎨 AI images: 0/${need.length}${fast ? '' : ' (free mode – thoda time lagega)'}`);
+    let failed = 0;
     await pool(need, fast ? 2 : 1, async (i) => {
       check();
       const s = scenes[i];
-      const bl = await sceneImage(p, n, i, s, { quality, force: !!s.imgDirty, signal: abort.signal });
-      s.imgDirty = false;
-      bitmaps[i] = await createImageBitmap(bl);
-      done++; P(0.08 + 0.4 * (done / need.length), `🎨 AI images: ${done}/${need.length}`);
+      try {
+        const bl = await sceneImage(p, n, i, s, { quality, force: !!s.imgDirty, signal: abort.signal });
+        s.imgDirty = false;
+        blobs[i] = bl; bitmaps[i] = await createImageBitmap(bl);
+      } catch (e) {
+        if (e?.name === 'AbortError') throw e;
+        console.warn('image failed', i, e);
+        failed++;
+      }
+      done++; P(0.08 + 0.4 * (done / need.length), `🎨 AI images: ${done}/${need.length}${failed ? ` (${failed} failed – reuse)` : ''}`);
     });
-    scenes.forEach((s, i) => (images[i] = bitmaps[s.ownImg ? i : imgRep(i, scenes.length, cap)]));
+    check();
+    const ok = Object.keys(bitmaps).map(Number).sort((a, b) => a - b);
+    if (!ok.length) bitmaps[-1] = await placeholderImage(p, quality);
+    const nearest = (i) => {
+      if (bitmaps[i]) return bitmaps[i];
+      if (!ok.length) return bitmaps[-1];
+      return bitmaps[ok.reduce((b, x) => (Math.abs(x - i) < Math.abs(b - i) ? x : b), ok[0])];
+    };
+    scenes.forEach((s, i) => (images[i] = nearest(s.ownImg ? i : imgRep(i, scenes.length, cap))));
     await save();
+
+    // 1b) real motion clips (person moves). free = limited daily quota, paid = every scene
+    const clips = new Array(scenes.length);
+    const motion = p.motion || 'none';
+    if (motion !== 'none' && ok.length) {
+      const maxClips = motion === 'paid' ? ok.length : Math.min(ok.length, p.format === 'long' ? 8 : 6);
+      const targets = ok.slice(0, maxClips);
+      const clipBy = {};
+      let mk = 0; let mfail = 0;
+      P(0.48, `🎥 Real motion: 0/${targets.length} (har clip ~30-60s)`);
+      for (const i of targets) {
+        check();
+        try {
+          const s = scenes[i];
+          clipBy[i] = await sceneClip(p, n, i, s, blobs[i] || (await db.getBlob(`${p.id}/p${n}/img${i}`)), {
+            engine: motion, signal: abort.signal, force: !!s.clipDirty,
+            onStatus: (st) => P(0.48, `🎥 Real motion ${mk + 1}/${targets.length}: ${st}`),
+          });
+          s.clipDirty = false; mfail = 0;
+        } catch (e) {
+          if (e?.name === 'AbortError') throw e;
+          console.warn('motion failed', i, e);
+          if (e instanceof QuotaError) { toast('🆓 Aaj ka free motion quota khatam – baaki scenes zoom/pan se banenge. (HF token Settings me daalein = zyada clips)'); break; }
+          mfail++;
+          if (motion === 'free' && mfail >= 2) break;
+          if (motion === 'paid' && mfail >= 2) throw new Error(`Paid motion failed: ${e.message}`);
+        }
+        mk++; P(0.48, `🎥 Real motion: ${mk}/${targets.length}`);
+      }
+      scenes.forEach((s, i) => { const r = s.ownImg ? i : imgRep(i, scenes.length, cap); clips[i] = clipBy[r] || null; });
+      d.clipCount = Object.keys(clipBy).length;
+      await save();
+    }
 
     // 2) voices
     const vo = (speaker) => p.voices[speaker] || p.voices.narrator;
@@ -673,7 +755,7 @@ async function makeVideo(p, n) {
     const meta = d.meta || {};
     const outro = p.mode === 'dance' ? d.script.outro : outroText(p, n);
     const o = {
-      mode: p.mode, format: p.format, quality, lang, images, channel: ch,
+      mode: p.mode, format: p.format, quality, lang, images, clips, channel: ch,
       title: p.bible.title_roman && lang !== 'hi' ? p.bible.title_roman : p.bible.title,
       partLabel: p.partsCount > 1 ? `PART ${n}` : '',
       nextPart: n < p.partsCount ? n + 1 : null,
@@ -727,6 +809,7 @@ async function openSettings() {
   const s = settings(); const f = document.getElementById('settingsForm');
   f.channel.value = s.channel || ''; f.quality.value = s.quality || 'hd'; f.geminiKey.value = s.geminiKey || '';
   f.cfAccount.value = s.cfAccount || ''; f.cfToken.value = s.cfToken || ''; f.pollinationsKey.value = s.pollinationsKey || '';
+  f.hfToken.value = s.hfToken || ''; f.falKey.value = s.falKey || ''; f.falModel.value = s.falModel || '';
   const est = await db.estimate();
   document.getElementById('storageInfo').textContent = est ? `💾 Browser storage: ${(est.usage / 1e6).toFixed(0)} MB used of ${(est.quota / 1e9).toFixed(1)} GB` : '';
   dlg.showModal();
@@ -738,6 +821,7 @@ dlg.addEventListener('close', () => {
   saveSettings({
     channel: f.channel.value.replace(/^@/, '').trim(), quality: f.quality.value, geminiKey: f.geminiKey.value.trim(),
     cfAccount: f.cfAccount.value.trim(), cfToken: f.cfToken.value.trim(), pollinationsKey: f.pollinationsKey.value.trim(),
+    hfToken: f.hfToken.value.trim(), falKey: f.falKey.value.trim(), falModel: f.falModel.value.trim(),
   });
   toast('✅ Settings saved'); route();
 });
