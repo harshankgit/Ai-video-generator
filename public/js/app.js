@@ -9,6 +9,7 @@ import { ALL_VOICES, voiceLabel, assignVoices, ttsBlob, decodeAudio, pool, scene
 import { MUSIC_MOODS, MOOD_KEYS, bpmOf, dominantMood, getMusicLoop, previewMood } from './music.js';
 import { renderVideo, composeThumbnail, ensureFonts } from './render.js';
 import { sceneClip, QuotaError } from './motion.js';
+import { chatbot } from './chatbot.js';
 
 const $app = document.getElementById('app');
 const COLORS = ['#FFD54F', '#4FC3F7', '#F48FB1', '#A5D6A7', '#CE93D8', '#FFAB91', '#80DEEA', '#E6EE9C'];
@@ -984,3 +985,6 @@ route();
 if (!channelOf()) setTimeout(() => toast('📺 ⚙️ Settings mein apna channel name daalein', 4000), 800);
 // expose for debugging
 window.__studio = { db, jobs, sceneCount, autoGenerate };
+
+// Chatbot already initialized and exported from chatbot.js
+window.chatbot = chatbot;
