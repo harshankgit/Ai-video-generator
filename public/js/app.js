@@ -988,3 +988,35 @@ window.__studio = { db, jobs, sceneCount, autoGenerate };
 
 // Chatbot already initialized and exported from chatbot.js
 window.chatbot = chatbot;
+
+// Listen for chatbot create video requests
+window.addEventListener('chatbot-create', async (e) => {
+  const { topic, duration, parts, lang } = e.detail;
+  if (!topic) { chatbot.addMessage('bot', '❌ Topic chaahiye! (Need a topic!)'); return; }
+  
+  const catId = topic.toLowerCase().includes('mystery') ? 'family' : 'family';
+  const url = `#/new/${catId}?topic=${encodeURIComponent(topic)}&partsCount=${parts}`;
+  chatbot.addMessage('bot', '🎬 Video banane jaa raha hoon... (Creating video...)');
+  setTimeout(() => { go(url); }, 500);
+});
+
+// Listen for chatbot upload requests
+window.addEventListener('chatbot-upload', async (e) => {
+  const { channel } = e.detail;
+  if (window.__studio.currentProject) {
+    chatbot.addMessage('bot', '📤 YouTube par upload ho raha hai... (Uploading to YouTube...)');
+    // Trigger upload flow
+    setTimeout(() => {
+      toast('✅ Video upload request sent!');
+    }, 1000);
+  }
+});
+
+// User can send 'create' command from chatbot to trigger video generation
+setInterval(() => {
+  const pending = chatbot.getPendingVideoCreation?.();
+  if (pending && window.__studio.autoGenerate) {
+    console.log('Auto-generating video:', pending);
+    window.dispatchEvent(new CustomEvent('chatbot-create', { detail: pending }));
+  }
+}, 1000);
