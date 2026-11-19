@@ -844,20 +844,72 @@ async function makeVideo(p, n) {
 }
 
 // ---------- AUTO-DOWNLOAD & YOUTUBE UPLOAD ----------
+// Upload confirmation dialog
+async function showUploadDialog(p, partNo) {
+  const title = `${p.meta?.title || 'Part ' + partNo}`;
+  const html = `
+    <div style="max-width: 500px;">
+      <h2>🎬 Video Ready!</h2>
+      <p><strong>${esc(title)}</strong> (Part ${partNo}/${p.partsCount}) is ready to download.</p>
+      <div class="note">✅ Shorts format (720×1280) • 15-30 seconds • Full HD</div>
+      <div style="margin: 20px 0;">
+        <p><strong>Upload to YouTube?</strong></p>
+        <label class="check">
+          <input type="checkbox" id="uploadYT" ${settings().youtubeToken ? 'checked' : 'disabled'} />
+          Auto-upload with title, description, tags
+          ${settings().youtubeToken ? '' : ' <span class="muted">(add YouTube token in Settings)</span>'}
+        </label>
+        <label style="margin-top: 10px;">
+          Channel name:
+          <input type="text" id="uploadChannel" value="${esc(channelOf())}" placeholder="e.g., HarshuVlog" />
+        </label>
+      </div>
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn" style="flex: 1;" onclick="this.closest('dialog').close('download')">📥 Download only</button>
+        <button class="btn primary" style="flex: 1;" onclick="this.closest('dialog').close('upload')" ${!settings().youtubeToken ? 'disabled' : ''}>📺 Upload to YouTube</button>
+      </div>
+    </div>
+  `;
+  return new Promise((resolve) => {
+    const dlg = document.createElement('dialog');
+    dlg.className = 'dlg';
+    dlg.innerHTML = html;
+    document.body.append(dlg);
+    dlg.showModal();
+    dlg.addEventListener('close', () => {
+      const channel = document.getElementById('uploadChannel')?.value || channelOf();
+      const upload = dlg.returnValue === 'upload' && document.getElementById('uploadYT')?.checked;
+      dlg.remove();
+      resolve({ upload, channel });
+    });
+  });
+}
+
 async function downloadPart(p, n, autoYoutube = false) {
   const blob = await db.getBlob(`${p.id}/p${n}/video`);
   if (!blob) return toast('❌ Video not ready');
   const d = pd(p, n);
   const fname = `${p.id}_part${n}.${d.ext || 'mp4'}`;
-  download(blob, fname);
-  if (autoYoutube) {
-    const accessToken = settings().youtubeToken;
-    if (!accessToken) return toast('⚠️ Set YouTube token in Settings first');
-    uploadToYouTube(p, n, blob, d.meta);
+
+  // Show upload confirmation dialog
+  if (!autoYoutube) {
+    const { upload, channel } = await showUploadDialog(p, n);
+    if (upload) {
+      download(blob, fname);
+      uploadToYouTube(p, n, blob, d.meta, channel);
+    } else {
+      download(blob, fname);
+    }
+  } else {
+    download(blob, fname);
+    if (autoYoutube && settings().youtubeToken) {
+      uploadToYouTube(p, n, blob, d.meta, channelOf());
+    }
   }
 }
 
-async function uploadToYouTube(p, n, videoBlob, meta) {
+async function uploadToYouTube(p, n, videoBlob, meta, channel = null) {
+  const ch = channel || channelOf();
   toast('📤 Uploading to YouTube...', 10000);
   try {
     const formData = new FormData();
@@ -865,7 +917,7 @@ async function uploadToYouTube(p, n, videoBlob, meta) {
     formData.append('description', meta?.description || p.bible.logline);
     formData.append('tags', (meta?.tags || []).slice(0, 20).join(','));
     formData.append('video', videoBlob, `${p.id}_p${n}.mp4`);
-    formData.append('channel', channelOf());
+    formData.append('channel', ch);
     const res = await fetch('/api/youtube-upload', { method: 'POST', body: formData, headers: keyHeaders() });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
